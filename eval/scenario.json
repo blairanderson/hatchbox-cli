@@ -1,0 +1,14 @@
+{
+  "token": "eval-token-abc123",
+  "accounts": [
+    { "id": 1, "name": "acme-inc" }
+  ],
+  "apps": [
+    { "id": 42, "name": "production-api", "repo_path": "acme/api", "branch": "main", "account_id": 1 }
+  ],
+  "processes": [
+    { "id": 101, "name": "web", "start_command": "bin/rails server", "server_id": 7, "active": true, "roles": ["web"] },
+    { "id": 102, "name": "worker", "start_command": "bundle exec sidekiq", "server_id": 7, "active": true, "roles": ["worker"] },
+    { "id": 103, "name": "clock", "start_command": "bundle exec clockwork", "server_id": 7, "active": true, "roles": ["clock"] }
+  ]
+}

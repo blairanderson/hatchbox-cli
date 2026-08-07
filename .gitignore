@@ -1,0 +1,5 @@
+*.gem
+.DS_Store
+/tmp/
+/coverage/
+.ruby-lsp/
