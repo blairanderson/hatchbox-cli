@@ -10,7 +10,7 @@ class Hatchbox < Formula
   desc "Command-line interface for the Hatchbox.io API"
   homepage "https://github.com/blairanderson/hatchbox-cli"
   url "https://github.com/blairanderson/hatchbox-cli/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "REPLACE_WITH_TARBALL_SHA256"
+  sha256 "f94f56fea98c1f202242fb17a4caaf09de4f9dd19f808ed489cbf1dfdff187a9"
   license "MIT"
 
   depends_on "ruby"
