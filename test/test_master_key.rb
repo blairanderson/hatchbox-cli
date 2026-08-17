@@ -43,21 +43,6 @@ class TestMasterKey < Minitest::Test
     end
   end
 
-  # --- repo matching -----------------------------------------------------
-
-  def test_repo_match_accepts_ssh_https_and_plain_paths
-    assert MK.repo_match?("git@github.com:acme/api.git", "acme/api")
-    assert MK.repo_match?("https://github.com/acme/api.git", "acme/api")
-    assert MK.repo_match?("https://github.com/Acme/API", "acme/api")
-    assert MK.repo_match?("git@gitlab.com:acme/team/api.git", "acme/team/api")
-  end
-
-  def test_repo_match_rejects_other_repos
-    refute MK.repo_match?("git@github.com:acme/api.git", "acme/web")
-    refute MK.repo_match?("git@github.com:other/api.git", "acme/api")
-    refute MK.repo_match?("git@github.com:acme/api.git", "")
-  end
-
   # --- key file discovery ------------------------------------------------
 
   def test_prefers_production_key_over_master_key

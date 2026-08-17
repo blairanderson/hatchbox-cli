@@ -56,14 +56,42 @@ The most common flow is: list accounts → notice there's just one → keep usin
 Defaults live in `~/.config/hatchboxcli/config.yml` (respects `XDG_CONFIG_HOME`). Precedence for
 the account: `--account/-a` → `HATCHBOX_ACCOUNT_ID` → saved default → auto (when single).
 
+## The app is detected from your git remote
+
+Run any app command inside a repo that Hatchbox deploys and the CLI figures out which app
+you mean — no id, no setup:
+
+```sh
+cd ~/dev/api
+hatchbox processes list
+# Detected app 42 (production-api) from origin acme/api (pinned via `git config hatchbox.app`).
+```
+
+An `<app_id>` is resolved in this order:
+
+1. an explicit id on the command line
+2. the **repo pin** — `git config hatchbox.app` (local to the repo, never committed)
+3. the **origin remote**, matched against your apps' `repo_path` — one match wins and is
+   pinned so later commands skip the API lookup; several matches are tie-broken by the
+   current git branch (staging vs production), and a remaining tie asks you to pin one
+4. the saved `default_app` from `hatchbox apps use <id>`
+
+Useful extras:
+
+- `hatchbox whoami` — show the current account and the app connected to this directory,
+  plus *how* it was resolved. Read-only.
+- `hatchbox apps use` (no id) — detect the app from the origin remote and pin it now.
+- `git config hatchbox.app <id>` — pin (or re-pin) by hand, e.g. to pick staging.
+
 ## Commands
 
 Every command accepts the global flags `--json`, `--token`, `--account/-a`, `--no-color`.
 
 | Group | Commands |
 |-------|----------|
+| `whoami` | show current account + the app for this directory |
 | `accounts` | `list`, `use <id>`, `current` |
-| `apps` | `list`, `get <id>`, `create`, `update <id>`, `deploy <id> [--sha]`, `restart <id>`, `auto-deploy enable\|disable <id>`, `use <id>` |
+| `apps` | `list`, `get <id>`, `create`, `update <id>`, `deploy <id> [--sha]`, `restart <id>`, `auto-deploy enable\|disable <id>`, `use [<id>]` |
 | `env` | `list <app_id>`, `set <app_id> KEY=VAL...`, `unset <app_id> KEY...` |
 | `master-key` | `[app_id] [--yes]` — set `RAILS_MASTER_KEY`, app found from your git remote |
 | `processes` | `list <app_id>`, `get <app_id> <id>`, `restart <app_id> <id>` |
@@ -129,10 +157,11 @@ hatchbox apps list --json | jq '.[].id'
 ## Examples
 
 ```sh
+hatchbox whoami                         # current account + the app for this directory
 hatchbox accounts list
 hatchbox apps list
-hatchbox apps use 42
-hatchbox processes list                 # uses default app 42
+hatchbox processes list                 # inside a deployed repo: app auto-detected + pinned
+hatchbox apps use 42                    # or set a default app for everywhere else
 hatchbox env set 42 RAILS_ENV=production SECRET_KEY=xyz
 hatchbox env unset 42 OLD_FLAG
 hatchbox master-key                     # set RAILS_MASTER_KEY (run inside the Rails repo)

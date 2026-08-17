@@ -2,6 +2,8 @@
 
 require "optparse"
 
+require_relative "../git"
+
 module Hatchbox
   module Commands
     module Apps
@@ -19,6 +21,8 @@ module Hatchbox
           auto-deploy enable <app_id>   Enable auto-deploy
           auto-deploy disable <app_id>  Disable auto-deploy
           use <app_id>                  Save <app_id> as the default app
+          use                           Detect the app from this repo's origin
+                                        remote and pin it (git config hatchbox.app)
 
         create/update options:
           --name, --branch, --repo-path, --connected-account-id,
@@ -106,10 +110,33 @@ module Hatchbox
       end
 
       def use(ctx, args)
-        id = args.shift or ctx.die("Usage: hatchbox apps use <app_id>", code: 2)
+        id = args.shift
+        return pin_from_repo(ctx) if id.nil?
+
         ctx.config["default_app"] = id.to_s
         ctx.output.info("Default app set to #{id}.")
         ctx.output.object({ "default_app" => id.to_s }) if ctx.json?
+      end
+
+      # `apps use` with no id: match origin against the account's apps, pin it.
+      def pin_from_repo(ctx)
+        remote = Git.remote or
+          ctx.die("Usage: hatchbox apps use <app_id>\n(no id given and no `origin` remote here to detect from)", code: 2)
+
+        matches = ctx.repo_app_matches(remote)
+        case matches.length
+        when 1
+          app = matches.first
+          id = app["id"].to_s
+          Git.pin_app(id) or ctx.die("Could not write `git config #{Git::PIN_KEY}` in this repo.")
+          ctx.output.info("Pinned app #{id} (#{app['name']}) to this repo (git config #{Git::PIN_KEY}).")
+          ctx.output.object({ "app_id" => id, "pinned" => true }) if ctx.json?
+        when 0
+          ctx.die("No app deploys #{Git.slug(remote)}. Pass an id: hatchbox apps use <app_id>")
+        else
+          list = matches.map { |a| "  git config #{Git::PIN_KEY} #{a['id']}   # #{a['name']} (#{a['branch']})" }
+          ctx.die("#{matches.length} apps deploy #{Git.slug(remote)}. Pin one for this repo:\n#{list.join("\n")}")
+        end
       end
 
       # Shared create/update flag parsing.

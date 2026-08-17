@@ -22,6 +22,18 @@ module TestHelper
     end
   end
 
+  # Build a throwaway git repo (on `branch`, with an `origin` remote when
+  # given) and run the block chdir'd inside it.
+  def with_git_repo(remote: nil, branch: "main")
+    Dir.mktmpdir do |dir|
+      real = File.realpath(dir)
+      system("git", "init", "-q", real, exception: true)
+      system("git", "-C", real, "symbolic-ref", "HEAD", "refs/heads/#{branch}", exception: true)
+      system("git", "-C", real, "remote", "add", "origin", remote, exception: true) if remote
+      Dir.chdir(real) { yield real }
+    end
+  end
+
   # Capture $stdout/$stderr produced by a block.
   def capture_io
     out = StringIO.new

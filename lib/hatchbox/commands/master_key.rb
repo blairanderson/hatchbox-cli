@@ -2,6 +2,8 @@
 
 require "optparse"
 
+require_relative "../git"
+
 module Hatchbox
   module Commands
     # Push a Rails master key to an app as RAILS_MASTER_KEY.
@@ -40,8 +42,8 @@ module Hatchbox
         parser = OptionParser.new { |o| o.on("--yes", "-y") { assume_yes = true } }
         rest = parser.parse(args)
 
-        root = git_root or ctx.die("Not a git repository. Run this from your Rails app.")
-        remote = git_remote or ctx.die("No `origin` git remote found in #{root}.")
+        root = Git.root or ctx.die("Not a git repository. Run this from your Rails app.")
+        remote = Git.remote or ctx.die("No `origin` git remote found in #{root}.")
 
         app = find_app(ctx, rest.shift, remote)
         id = app["id"]
@@ -70,7 +72,7 @@ module Hatchbox
 
         account = ctx.resolve_account
         apps = Array(ctx.client.get("/accounts/#{account}/apps"))
-        matches = apps.select { |a| repo_match?(remote, a["repo_path"]) }
+        matches = apps.select { |a| Git.repo_match?(remote, a["repo_path"]) }
 
         case matches.length
         when 1
@@ -79,14 +81,14 @@ module Hatchbox
           app
         when 0
           ctx.die(<<~MSG.strip)
-            No app in account #{account} deploys #{slug(remote)} (origin: #{remote}).
+            No app in account #{account} deploys #{Git.slug(remote)} (origin: #{remote}).
 
             Apps in this account:
             #{apps.map { |a| "  #{a['id']}  #{a['name']}  #{a['repo_path']}" }.join("\n")}
           MSG
         else
           ctx.die(<<~MSG.strip)
-            #{matches.length} apps deploy #{slug(remote)}. Say which one:
+            #{matches.length} apps deploy #{Git.slug(remote)}. Say which one:
 
             #{matches.map { |a| "  hatchbox master-key #{a['id']}   # #{a['name']}" }.join("\n")}
           MSG
@@ -95,7 +97,7 @@ module Hatchbox
 
       def verify_app(ctx, id, remote)
         app = ctx.client.get("/apps/#{id}")
-        return app if repo_match?(remote, app["repo_path"])
+        return app if Git.repo_match?(remote, app["repo_path"])
 
         ctx.die(<<~MSG.strip)
           Repo mismatch — refusing to overwrite #{ENV_NAME}.
@@ -132,33 +134,6 @@ module Hatchbox
         [nil, nil]
       end
 
-      def git_root
-        out = `git rev-parse --show-toplevel 2>/dev/null`.strip
-        out.empty? ? nil : out
-      end
-
-      def git_remote
-        out = `git remote get-url origin 2>/dev/null`.strip
-        out.empty? ? nil : out
-      end
-
-      # True when the app's repo_path is a tail of the remote URL's segments,
-      # so "git@github.com:acme/api.git" matches "acme/api" (and nested groups).
-      def repo_match?(remote, repo_path)
-        want = segments(repo_path)
-        return false if want.length < 2
-
-        segments(remote).last(want.length) == want
-      end
-
-      def segments(str)
-        str.to_s.strip.downcase.sub(/\.git\z/, "").split(%r{[:/]}).reject(&:empty?)
-      end
-
-      # "git@github.com:acme/api.git" -> "acme/api", for messages.
-      def slug(remote)
-        segments(remote).last(2).join("/")
-      end
     end
   end
 end

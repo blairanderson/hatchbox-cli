@@ -4,6 +4,7 @@ require_relative "version"
 require_relative "config"
 require_relative "client"
 require_relative "output"
+require_relative "git"
 
 module Hatchbox
   # Signals a clean exit with a specific code (used instead of `exit` so tests
@@ -20,6 +21,7 @@ module Hatchbox
   TOKEN_ENV_VARS = %w[HATCHBOX_API_KEY HATCHBOX_TOKEN HATCHBOX_API_TOKEN].freeze
 
   GROUPS = {
+    "whoami" => "Whoami",
     "accounts" => "Accounts",
     "apps" => "Apps",
     "env" => "Env",
@@ -92,12 +94,57 @@ module Hatchbox
       end
     end
 
-    # Resolve an app id: explicit arg or the saved default_app.
+    # Resolve an app id, in order:
+    #   1. explicit arg
+    #   2. app pinned to this repo (`git config hatchbox.app`)
+    #   3. the account app whose repo_path matches this repo's origin remote
+    #      (auto-pinned on first match)
+    #   4. the saved default_app
     def resolve_app(explicit = nil)
-      id = explicit || @config["default_app"]
+      id = explicit || Git.pinned_app
       return id.to_s if id && !id.to_s.empty?
 
-      die("No app specified. Pass an <app_id> or set one with `hatchbox apps use <id>`.")
+      id = detect_app_from_repo
+      return id if id
+
+      id = @config["default_app"]
+      return id.to_s if id && !id.to_s.empty?
+
+      die("No app specified. Pass an <app_id>, run from a repo Hatchbox deploys, " \
+          "or set a default with `hatchbox apps use <id>`.")
+    end
+
+    # Account apps whose repo_path matches the origin remote. When several
+    # match (staging + production), the current git branch breaks the tie.
+    def repo_app_matches(remote)
+      apps = Array(client.get("/accounts/#{resolve_account}/apps"))
+      matches = apps.select { |a| Git.repo_match?(remote, a["repo_path"]) }
+      if matches.length > 1
+        branch = Git.current_branch
+        on_branch = matches.select { |a| a["branch"].to_s == branch }
+        matches = on_branch if on_branch.length == 1
+      end
+      matches
+    end
+
+    def detect_app_from_repo
+      remote = Git.remote
+      return nil unless remote
+
+      matches = repo_app_matches(remote)
+      case matches.length
+      when 0 then nil
+      when 1
+        app = matches.first
+        id = app["id"].to_s
+        pinned = Git.pin_app(id)
+        note = pinned ? " (pinned via `git config #{Git::PIN_KEY}`)" : ""
+        @output.info("Detected app #{id} (#{app['name']}) from origin #{Git.slug(remote)}#{note}.")
+        id
+      else
+        list = matches.map { |a| "  git config #{Git::PIN_KEY} #{a['id']}   # #{a['name']} (#{a['branch']})" }
+        die("#{matches.length} apps deploy #{Git.slug(remote)}. Pin one for this repo:\n#{list.join("\n")}")
+      end
     end
 
     def die(message, code: 1)
@@ -210,6 +257,7 @@ module Hatchbox
           hatchbox <group> <command> [args] [options]
 
         Groups:
+          whoami         show current account + the app for this directory
           accounts       list / use / current
           apps           list / get / create / update / deploy / restart / auto-deploy / use
           env            list / set / unset
@@ -232,10 +280,12 @@ module Hatchbox
           --help, -h         Show help
           --version, -v      Show version
 
-        Most commands that take <app_id> fall back to your saved default app
-        (set with `hatchbox apps use <id>`).
+        Most commands that take <app_id> resolve it automatically: a repo pin
+        (`git config hatchbox.app`), then this repo's origin remote matched
+        against your apps, then the saved default (`hatchbox apps use <id>`).
 
         Examples:
+          hatchbox whoami
           hatchbox accounts list
           hatchbox apps list
           hatchbox processes list 1234
