@@ -114,12 +114,26 @@ module Eval
       in ["GET", "/api/v1/accounts"]
         [200, @state.accounts]
       else
-        dynamic_route(method, path)
+        dynamic_route(method, path, req[:body])
       end
     end
 
-    def dynamic_route(method, path)
+    def parse_json(body)
+      body.nil? || body.empty? ? {} : JSON.parse(body)
+    rescue JSON::ParserError
+      {}
+    end
+
+    def dynamic_route(method, path, body = nil)
       case path
+      when %r{\A/api/v1/apps/([^/]+)/env_vars\z}
+        return not_found("App") unless @state.app(Regexp.last_match(1))
+
+        case method
+        when "GET" then [200, @state.env_var_names]
+        when "PUT" then [200, @state.set_env_vars(parse_json(body)["env_vars"])]
+        else [405, { "error" => "method not allowed" }]
+        end
       when %r{\A/api/v1/accounts/([^/]+)/apps\z}
         acct = @state.account(Regexp.last_match(1))
         return not_found("Account") unless acct

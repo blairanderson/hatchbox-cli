@@ -65,6 +65,7 @@ Every command accepts the global flags `--json`, `--token`, `--account/-a`, `--n
 | `accounts` | `list`, `use <id>`, `current` |
 | `apps` | `list`, `get <id>`, `create`, `update <id>`, `deploy <id> [--sha]`, `restart <id>`, `auto-deploy enable\|disable <id>`, `use <id>` |
 | `env` | `list <app_id>`, `set <app_id> KEY=VAL...`, `unset <app_id> KEY...` |
+| `master-key` | `[app_id] [--yes]` — set `RAILS_MASTER_KEY`, app found from your git remote |
 | `processes` | `list <app_id>`, `get <app_id> <id>`, `restart <app_id> <id>` |
 | `clusters` | `list`, `get <id>` |
 | `servers` | `list <cluster_id>`, `get <cluster_id> <id>` |
@@ -84,6 +85,41 @@ hatchbox logs watch 99          # polls until completed / failed / aborted
 
 Env var values are **write-only** — the API never returns them, so `env list` shows names only.
 
+### RAILS_MASTER_KEY
+
+The Heroku equivalent is `heroku config:set RAILS_MASTER_KEY=$(cat config/credentials/production.key)`.
+Here it is one command with no arguments. Run it inside your Rails repo:
+
+```sh
+hatchbox master-key
+```
+
+```
+Matched app 42 (production-api) — acme/api
+
+App 42 (production-api)
+  repo      acme/api
+  key file  config/credentials/production.key
+
+Overwrite RAILS_MASTER_KEY on app 42? [y/N] y
+Set RAILS_MASTER_KEY on app 42 (production-api) from config/credentials/production.key.
+Run `hatchbox apps restart 42` (or deploy) to apply it.
+```
+
+What it does:
+
+1. reads `git remote get-url origin`
+2. finds the app in your account whose `repo_path` is that repo
+3. reads `config/credentials/production.key`, or `config/master.key` if the first is absent
+4. asks you to confirm, then sets `RAILS_MASTER_KEY`
+
+If two apps deploy the same repo (staging and production, say), it lists them and you pick one:
+`hatchbox master-key 43`. An explicit app id is still checked against your git remote, so the
+command **stops on a mismatch** and you cannot push one app's key to another app.
+
+Add `--yes` in scripts and CI. The key never appears in your shell history or in `ps` output.
+Env vars apply on the next deploy or restart, so finish with `hatchbox apps restart 42`.
+
 ### JSON output
 
 ```sh
@@ -99,6 +135,7 @@ hatchbox apps use 42
 hatchbox processes list                 # uses default app 42
 hatchbox env set 42 RAILS_ENV=production SECRET_KEY=xyz
 hatchbox env unset 42 OLD_FLAG
+hatchbox master-key                     # set RAILS_MASTER_KEY (run inside the Rails repo)
 hatchbox apps deploy 42
 hatchbox databases backup-trigger 7
 ```

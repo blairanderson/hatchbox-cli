@@ -23,6 +23,7 @@ module Hatchbox
     "accounts" => "Accounts",
     "apps" => "Apps",
     "env" => "Env",
+    "master-key" => "MasterKey",
     "processes" => "Processes",
     "clusters" => "Clusters",
     "servers" => "Servers",
@@ -212,6 +213,7 @@ module Hatchbox
           accounts       list / use / current
           apps           list / get / create / update / deploy / restart / auto-deploy / use
           env            list / set / unset
+          master-key     set RAILS_MASTER_KEY from this repo's Rails master key
           processes      list / get / restart
           clusters       list / get
           servers        list / get
@@ -239,6 +241,7 @@ module Hatchbox
           hatchbox processes list 1234
           hatchbox apps deploy 1234 --sha abc123
           hatchbox env set 1234 RAILS_ENV=production SECRET=xyz
+          hatchbox master-key                     # inside your Rails repo
           hatchbox logs watch 99
       USAGE
     end
