@@ -8,9 +8,11 @@ module Hatchbox
       HELP = <<~HELP
         hatchbox env <command>
 
-          list <app_id>                    List env var names (values are never returned by the API)
           set <app_id> KEY=VALUE [KEY=VALUE ...]   Add or update env vars
           unset <app_id> KEY [KEY ...]     Remove env vars
+
+        Env vars are write-only. The API exposes no read endpoint, so there is
+        no `env list` — read them in the Hatchbox web UI instead.
       HELP
 
       def run(ctx, args, help: false)
@@ -18,17 +20,20 @@ module Hatchbox
         return puts(HELP) if help || sub.nil?
 
         case sub
-        when "list" then list(ctx, args)
+        when "list" then unsupported_list(ctx)
         when "set" then set(ctx, args)
         when "unset" then unset(ctx, args)
         else ctx.die("Unknown env command: #{sub}\n\n#{HELP}", code: 2)
         end
       end
 
-      def list(ctx, args)
-        id = ctx.resolve_app(args.shift)
-        vars = Array(ctx.client.get("/apps/#{id}/env_vars"))
-        ctx.output.list(vars, columns: [%w[id ID], %w[name Name]], empty: "No env vars found.")
+      # The Hatchbox API has no GET for env vars — /apps/:id/env_vars answers a
+      # redirect, which used to surface here as a bare "API error (301)". Say
+      # what is actually going on instead.
+      def unsupported_list(ctx)
+        ctx.die("Env vars are write-only: the Hatchbox API has no endpoint that " \
+                "returns them. Use `hatchbox env set` / `env unset` to change them, " \
+                "and the Hatchbox web UI to read them.", code: 2)
       end
 
       def set(ctx, args)

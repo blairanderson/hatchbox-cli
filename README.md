@@ -111,7 +111,7 @@ hatchbox apps deploy 42 --sha abc123
 hatchbox logs watch 99          # polls until completed / failed / aborted
 ```
 
-Env var values are **write-only** — the API never returns them, so `env list` shows names only.
+Env vars are **write-only** — the API exposes no read endpoint at all, so there is no `env list`. Set and unset them here; read them in the Hatchbox web UI.
 
 ### RAILS_MASTER_KEY
 

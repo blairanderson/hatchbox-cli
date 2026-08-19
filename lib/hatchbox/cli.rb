@@ -260,7 +260,7 @@ module Hatchbox
           whoami         show current account + the app for this directory
           accounts       list / use / current
           apps           list / get / create / update / deploy / restart / auto-deploy / use
-          env            list / set / unset
+          env            set / unset (write-only; no read endpoint)
           master-key     set RAILS_MASTER_KEY from this repo's Rails master key
           processes      list / get / restart
           clusters       list / get
