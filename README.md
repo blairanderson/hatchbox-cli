@@ -29,19 +29,46 @@ git clone https://github.com/blairanderson/hatchbox-cli
 ./hatchbox-cli/bin/hatchbox --version
 ```
 
-## Authentication (flexible)
+## Authentication
 
-Create a token in Hatchbox under **API Tokens**. The CLI looks for it in this order (first wins):
-
-1. `--token <TOKEN>` flag
-2. `HATCHBOX_API_KEY`
-3. `HATCHBOX_TOKEN`
-4. `HATCHBOX_API_TOKEN`
-5. `token:` in the config file
+Create a token in Hatchbox under **API Tokens**, then log in:
 
 ```sh
-export HATCHBOX_API_KEY="your-token"
+hatchbox auth login
+# or, for scripts:
+echo "$TOKEN" | hatchbox auth login --with-token --user personal
 ```
+
+Store multiple tokens and switch between them (like `gh auth`):
+
+```sh
+hatchbox auth login --user personal
+hatchbox auth login --user work
+hatchbox auth switch --user personal   # global default
+hatchbox auth status                   # list logged-in users
+```
+
+Pin a user to a directory or repo so the global default does not apply:
+
+```sh
+cd ~/dev/work
+hatchbox auth use work                 # writes .hatchbox-user (all subdirs inherit)
+
+cd ~/dev/work/some-repo
+hatchbox auth use work                 # writes git config hatchbox.user (local only)
+```
+
+User resolution for each command (first match wins):
+
+1. `--token <TOKEN>` flag
+2. `HATCHBOX_API_KEY` / `HATCHBOX_TOKEN` / `HATCHBOX_API_TOKEN`
+3. `HATCHBOX_USER` env var
+4. `git config --local hatchbox.user` (repo pin)
+5. `.hatchbox-user` file (walk up from cwd)
+6. global default (`hatchbox auth switch`)
+
+Credentials live in `~/.config/hatchboxcli/config.yml` (respects `XDG_CONFIG_HOME`).
+Each user stores their own `default_account` and `default_app`.
 
 ## Remembering your account & app
 
@@ -53,8 +80,7 @@ The most common flow is: list accounts → notice there's just one → keep usin
 - `hatchbox apps use <id>` — remember a default app, so commands like `hatchbox processes list`
   work without repeating the app id.
 
-Defaults live in `~/.config/hatchboxcli/config.yml` (respects `XDG_CONFIG_HOME`). Precedence for
-the account: `--account/-a` → `HATCHBOX_ACCOUNT_ID` → saved default → auto (when single).
+Precedence for the account: `--account/-a` → `HATCHBOX_ACCOUNT_ID` → saved default → auto (when single).
 
 ## The app is detected from your git remote
 
@@ -78,8 +104,8 @@ An `<app_id>` is resolved in this order:
 
 Useful extras:
 
-- `hatchbox whoami` — show the current account and the app connected to this directory,
-  plus *how* it was resolved. Read-only.
+- `hatchbox whoami` — show the resolved user, account, and app for this directory,
+  plus *how* each was resolved. Read-only.
 - `hatchbox apps use` (no id) — detect the app from the origin remote and pin it now.
 - `git config hatchbox.app <id>` — pin (or re-pin) by hand, e.g. to pick staging.
 
@@ -89,7 +115,8 @@ Every command accepts the global flags `--json`, `--token`, `--account/-a`, `--n
 
 | Group | Commands |
 |-------|----------|
-| `whoami` | show current account + the app for this directory |
+| `whoami` | show resolved user, account, and app for this directory |
+| `auth` | `login`, `status`, `switch`, `logout`, `use <user>`, `unuse` |
 | `accounts` | `list`, `use <id>`, `current` |
 | `apps` | `list`, `get <id>`, `create`, `update <id>`, `deploy <id> [--sha]`, `restart <id>`, `auto-deploy enable\|disable <id>`, `use [<id>]` |
 | `env` | `list <app_id>`, `set <app_id> KEY=VAL...`, `unset <app_id> KEY...` |
@@ -157,7 +184,9 @@ hatchbox apps list --json | jq '.[].id'
 ## Examples
 
 ```sh
-hatchbox whoami                         # current account + the app for this directory
+hatchbox auth login --user personal
+hatchbox auth use work                  # in a work directory or repo
+hatchbox whoami                         # user, account, and app for this directory
 hatchbox accounts list
 hatchbox apps list
 hatchbox processes list                 # inside a deployed repo: app auto-detected + pinned
@@ -186,9 +215,12 @@ The `HATCHBOX_API_URL` env var overrides the base URL (used by tests and the eva
 
 ## Releasing (Homebrew)
 
-1. Tag a release: `git tag v0.1.0 && git push --tags`.
-2. GitHub creates the source tarball at `.../archive/refs/tags/v0.1.0.tar.gz`.
-3. `shasum -a 256` the tarball and update `url` + `sha256` in the tap's `Formula/hatchbox.rb`.
+1. Bump `lib/hatchbox/version.rb`, commit, and push `main`.
+2. Tag and push: `git tag v0.4.0 && git push origin v0.4.0`.
+3. `shasum -a 256` the tarball from `.../archive/refs/tags/v0.4.0.tar.gz`.
+4. Update `url` + `sha256` in `Formula/hatchbox.rb` (both repos) and push the tap.
+5. `brew update && brew upgrade hatchbox`.
+6. `gh release create v0.4.0 --notes "..."`.
 
 ## LLM eval
 
