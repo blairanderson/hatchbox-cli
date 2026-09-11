@@ -10,7 +10,7 @@ module Hatchbox
         hatchbox config <command>
 
           path            Print the config file path
-          show            Show the current config (token is masked)
+          show            Show the current config (tokens are masked)
       HELP
 
       def run(ctx, args, help: false)
@@ -26,12 +26,25 @@ module Hatchbox
 
       def show(ctx)
         data = ctx.config.to_h
-        data["token"] = mask(data["token"]) if data["token"]
+        data.delete("token")
+        data.delete("default_account")
+        data.delete("default_app")
+
+        if data["users"].is_a?(Hash)
+          data["users"] = data["users"].transform_values do |entry|
+            next entry unless entry.is_a?(Hash)
+
+            masked = entry.dup
+            masked["token"] = mask(masked["token"]) if masked["token"]
+            masked
+          end
+        end
+
         ctx.output.object(data)
       end
 
       def mask(token)
-        return token if token.length <= 4
+        return token if token.nil? || token.length <= 4
 
         "#{'*' * (token.length - 4)}#{token[-4..]}"
       end

@@ -31,6 +31,16 @@ class TestGit < Minitest::Test
     end
   end
 
+  def test_pins_user_to_repo
+    with_git_repo do
+      assert_nil G.pinned_user
+      assert G.pin_user("work")
+      assert_equal "work", G.pinned_user
+      assert G.unpin_user
+      assert_nil G.pinned_user
+    end
+  end
+
   def test_returns_nil_outside_a_git_repo
     Dir.mktmpdir do |dir|
       Dir.chdir(dir) do

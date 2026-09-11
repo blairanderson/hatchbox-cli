@@ -28,10 +28,10 @@ module Hatchbox
       def list(ctx)
         accounts = Array(ctx.client.get("/accounts"))
         # Auto-cache when there is exactly one account.
-        if ctx.config["default_account"].nil? && accounts.length == 1
-          ctx.config["default_account"] = accounts.first["id"].to_s
+        if ctx.auth.default_account.nil? && accounts.length == 1
+          ctx.auth.default_account = accounts.first["id"].to_s
         end
-        default = ctx.config["default_account"].to_s
+        default = ctx.auth.default_account.to_s
         rows = accounts.map do |a|
           a.merge("default" => (a["id"].to_s == default ? "*" : ""))
         end
@@ -41,13 +41,13 @@ module Hatchbox
 
       def use(ctx, args)
         id = args.shift or ctx.die("Usage: hatchbox accounts use <id>", code: 2)
-        ctx.config["default_account"] = id.to_s
+        ctx.auth.default_account = id.to_s
         ctx.output.info("Default account set to #{id}.")
         ctx.output.object({ "default_account" => id.to_s }) if ctx.json?
       end
 
       def current(ctx)
-        id = ctx.config["default_account"]
+        id = ctx.auth.default_account
         ctx.die("No default account set. Run `hatchbox accounts use <id>`.") if id.nil?
         ctx.output.object({ "default_account" => id.to_s })
       end

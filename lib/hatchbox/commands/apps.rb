@@ -113,7 +113,7 @@ module Hatchbox
         id = args.shift
         return pin_from_repo(ctx) if id.nil?
 
-        ctx.config["default_app"] = id.to_s
+        ctx.auth.default_app = id.to_s
         ctx.output.info("Default app set to #{id}.")
         ctx.output.object({ "default_app" => id.to_s }) if ctx.json?
       end

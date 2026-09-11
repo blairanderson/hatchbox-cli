@@ -11,14 +11,15 @@ module TestHelper
   def with_clean_env
     Dir.mktmpdir do |dir|
       saved = ENV.to_h.slice("XDG_CONFIG_HOME", "HATCHBOX_API_KEY", "HATCHBOX_TOKEN",
-                             "HATCHBOX_API_TOKEN", "HATCHBOX_ACCOUNT_ID", "HATCHBOX_API_URL")
+                             "HATCHBOX_API_TOKEN", "HATCHBOX_ACCOUNT_ID", "HATCHBOX_API_URL",
+                             "HATCHBOX_USER")
       ENV["XDG_CONFIG_HOME"] = dir
-      %w[HATCHBOX_API_KEY HATCHBOX_TOKEN HATCHBOX_API_TOKEN HATCHBOX_ACCOUNT_ID].each { |k| ENV.delete(k) }
+      %w[HATCHBOX_API_KEY HATCHBOX_TOKEN HATCHBOX_API_TOKEN HATCHBOX_ACCOUNT_ID HATCHBOX_USER].each { |k| ENV.delete(k) }
       yield dir
     ensure
       saved.each { |k, v| ENV[k] = v }
       %w[XDG_CONFIG_HOME HATCHBOX_API_KEY HATCHBOX_TOKEN HATCHBOX_API_TOKEN
-         HATCHBOX_ACCOUNT_ID HATCHBOX_API_URL].each { |k| ENV.delete(k) unless saved.key?(k) }
+         HATCHBOX_ACCOUNT_ID HATCHBOX_API_URL HATCHBOX_USER].each { |k| ENV.delete(k) unless saved.key?(k) }
     end
   end
 

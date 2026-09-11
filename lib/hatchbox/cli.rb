@@ -2,6 +2,7 @@
 
 require_relative "version"
 require_relative "config"
+require_relative "auth"
 require_relative "client"
 require_relative "output"
 require_relative "git"
@@ -34,16 +35,18 @@ module Hatchbox
     "db-clusters" => "DbClusters",
     "databases" => "Databases",
     "logs" => "Logs",
-    "config" => "ConfigCmd"
+    "config" => "ConfigCmd",
+    "auth" => "AuthCmd"
   }.freeze
 
   # Shared state + helpers handed to every command module.
   class Context
-    attr_reader :options, :config, :output
+    attr_reader :options, :config, :auth, :output
 
     def initialize(options)
       @options = options
       @config = Config.new
+      @auth = Auth.new(@config)
       @output = Output.new(json: options[:json])
       @client = nil
     end
@@ -52,7 +55,7 @@ module Hatchbox
       @options[:json]
     end
 
-    # Resolve the API token: --token flag, then env vars, then config file.
+    # Resolve the API token: --token flag, then env vars, then active user.
     def token
       return @options[:token] if @options[:token] && !@options[:token].empty?
 
@@ -61,7 +64,7 @@ module Hatchbox
         return val if val && !val.empty?
       end
 
-      cfg = @config["token"]
+      cfg = @auth.token
       return cfg if cfg && !cfg.empty?
 
       raise MissingTokenError, token_help
@@ -74,7 +77,7 @@ module Hatchbox
     # Resolve the account id: explicit arg, --account flag, env, config default,
     # or (when the account list has exactly one entry) auto-select and cache it.
     def resolve_account(explicit = nil)
-      id = explicit || @options[:account] || env_account || @config["default_account"]
+      id = explicit || @options[:account] || env_account || @auth.default_account
       return id.to_s if id && !id.to_s.empty?
 
       accounts = client.get("/accounts")
@@ -84,7 +87,7 @@ module Hatchbox
         die("No accounts are available for this token.")
       when 1
         chosen = accounts.first["id"].to_s
-        @config["default_account"] = chosen
+        @auth.default_account = chosen
         @output.info("Using account #{account_label(accounts.first)} (saved as default).")
         chosen
       else
@@ -107,7 +110,7 @@ module Hatchbox
       id = detect_app_from_repo
       return id if id
 
-      id = @config["default_app"]
+      id = @auth.default_app
       return id.to_s if id && !id.to_s.empty?
 
       die("No app specified. Pass an <app_id>, run from a repo Hatchbox deploys, " \
@@ -171,7 +174,7 @@ module Hatchbox
           2. export HATCHBOX_API_KEY=<TOKEN>
           3. export HATCHBOX_TOKEN=<TOKEN>
           4. export HATCHBOX_API_TOKEN=<TOKEN>
-          5. `token:` in #{Config.path}
+          5. the active user in #{Config.path} (`hatchbox auth login`)
 
         Create a token in Hatchbox under your account's API Tokens page.
       MSG
@@ -208,6 +211,9 @@ module Hatchbox
       klass.run(ctx, rest, help: opts[:help])
       0
     rescue MissingTokenError => e
+      warn e.message
+      1
+    rescue UnknownUserError => e
       warn e.message
       1
     rescue APIError => e
@@ -271,10 +277,11 @@ module Hatchbox
           databases      list / get / create / update / attach / detach / backup-latest / backup-trigger
           logs           get / watch
           config         path / show
+          auth           login / status / switch / logout / use / unuse
 
         Global options:
           --json             Output raw JSON instead of a table
-          --token <TOKEN>    API token (else HATCHBOX_API_KEY / HATCHBOX_TOKEN / HATCHBOX_API_TOKEN / config)
+          --token <TOKEN>    API token (else env vars / active user from `hatchbox auth login`)
           --account, -a <id> Account id (else HATCHBOX_ACCOUNT_ID / saved default / auto when single)
           --no-color         Plain output
           --help, -h         Show help
