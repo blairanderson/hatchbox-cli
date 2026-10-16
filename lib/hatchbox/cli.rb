@@ -276,7 +276,7 @@ module Hatchbox
           db-clusters    list
           databases      list / get / create / update / attach / detach / backup-latest / backup-trigger
           logs           get / watch
-          config         path / show
+          config         path / show / reset
           auth           login / status / switch / logout / use / unuse
 
         Global options:

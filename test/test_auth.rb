@@ -36,6 +36,17 @@ class TestAuth < Minitest::Test
       auth = Hatchbox::Auth.new
       assert_equal "acme-inc", auth.active_user
       assert_equal @state.token, auth.token
+
+      code, out, = run_cli(%w[--json accounts current])
+      assert_equal 0, code
+      assert_equal "1", JSON.parse(out)["default_account"]
+
+      with_git_repo(remote: "git@github.com:acme/api.git") do
+        assert_equal 0, run_cli(%w[auth use acme-inc]).first
+        code, out, = run_cli(%w[--json whoami])
+        assert_equal 0, code
+        assert_equal "42", JSON.parse(out)["app_id"]
+      end
     end
   end
 
@@ -47,11 +58,11 @@ class TestAuth < Minitest::Test
 
       code, out, = run_cli(%w[auth status])
       assert_equal 0, code
-      assert_match(/app\.hatchbox\.io/, out)
-      assert_match(/Logged in as work/, out)
-      assert_match(/Logged in as personal/, out)
-      assert_match(/Active user: false/, out)
-      assert_match(/Active user: true/, out)
+      assert_match(/127\.0\.0\.1/, out)
+      assert_match(/Saved profile: work/, out)
+      assert_match(/Saved profile: personal/, out)
+      assert_match(/Global default: false/, out)
+      assert_match(/Global default: true/, out)
     end
   end
 
@@ -200,6 +211,107 @@ class TestAuth < Minitest::Test
           assert_equal "work", File.read(".hatchbox-user").strip
         end
       end
+    end
+  end
+
+  def test_auth_use_rejects_revoked_token_before_changing_pin
+    with_clean_env do
+      ENV["HATCHBOX_API_URL"] = @server.base_url
+      run_cli_with_stdin(%w[auth login --with-token --user work], @state.token)
+      config = Hatchbox::Config.new
+      users = config["users"]
+      config["users"] = users.merge("work" => users["work"].merge("token" => "revoked"))
+      ENV["HATCHBOX_API_KEY"] = @state.token
+
+      with_git_repo do
+        Hatchbox::Git.pin_user("existing")
+        code, out, err = run_cli(%w[auth use work])
+        assert_equal 1, code
+        assert_empty out
+        assert_match(/401/, err)
+        assert_match(/hatchbox auth login --user work/, err)
+        assert_equal "existing", Hatchbox::Git.pinned_user
+      end
+    end
+  end
+
+  def test_mock_login_cannot_overwrite_live_credentials
+    with_clean_env do
+      config = Hatchbox::Config.new
+      config["users"] = { "work" => { "token" => "live-secret", "default_account" => "5738" } }
+      config["user"] = "work"
+      live_contents = File.read(config.path)
+
+      ENV["HATCHBOX_API_URL"] = @server.base_url
+      code, = run_cli_with_stdin(%w[auth login --with-token --user work], @state.token)
+      assert_equal 0, code
+      assert_equal @state.token, Hatchbox::Auth.new.token
+      assert_equal live_contents, File.read(config.path)
+
+      ENV.delete("HATCHBOX_API_URL")
+      assert_equal "live-secret", Hatchbox::Auth.new.token
+      assert_equal "5738", Hatchbox::Auth.new.default_account
+    end
+  end
+
+  def test_login_replaces_defaults_for_an_inaccessible_account
+    with_clean_env do
+      ENV["HATCHBOX_API_URL"] = @server.base_url
+      run_cli_with_stdin(%w[auth login --with-token --user work], @state.token)
+      run_cli(%w[accounts use 999])
+      run_cli(%w[apps use 888])
+
+      with_git_repo do
+        Hatchbox::Git.pin_user("missing")
+        code, = run_cli_with_stdin(%w[auth login --with-token --user work], @state.token)
+        assert_equal 0, code
+      end
+
+      assert_equal "1", Hatchbox::Auth.new.default_account
+      assert_nil Hatchbox::Auth.new.default_app
+    end
+  end
+
+  def test_login_with_multiple_accounts_requires_a_choice
+    with_clean_env do
+      ENV["HATCHBOX_API_URL"] = @server.base_url
+      @state.accounts << { "id" => 2, "name" => "second-account" }
+      code, out, = run_cli_with_stdin(%w[auth login --with-token --user work], @state.token)
+      assert_equal 0, code
+      assert_match(/hatchbox accounts use <id>/, out)
+      assert_nil Hatchbox::Auth.new.default_account
+
+      run_cli(%w[accounts use 2])
+      run_cli(%w[apps use 43])
+      run_cli_with_stdin(%w[auth login --with-token --user work], @state.token)
+      assert_equal "2", Hatchbox::Auth.new.default_account
+      assert_equal "43", Hatchbox::Auth.new.default_app
+    end
+  end
+
+  def test_config_reset_requires_confirmation_and_allows_fresh_login
+    with_clean_env do
+      ENV["HATCHBOX_API_URL"] = @server.base_url
+      run_cli_with_stdin(%w[auth login --with-token --user work], @state.token)
+      path = Hatchbox::Config.path
+      original = File.read(path)
+
+      code, _out, err = run_cli(%w[config reset])
+      assert_equal 2, code
+      assert_match(/--yes/, err)
+      assert_equal original, File.read(path)
+
+      assert_equal 0, run_cli(%w[config reset --yes]).first
+      refute File.exist?(path)
+      assert_equal 0, run_cli(%w[config reset --yes]).first
+      assert_empty Hatchbox::Auth.new.users
+      code, _out, err = run_cli(%w[whoami])
+      assert_equal 1, code
+      assert_match(/hatchbox auth login/, err)
+
+      code, = run_cli_with_stdin(%w[auth login --with-token --user work], @state.token)
+      assert_equal 0, code
+      assert_equal "1", Hatchbox::Auth.new.default_account
     end
   end
 

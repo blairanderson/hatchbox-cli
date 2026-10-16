@@ -11,6 +11,10 @@ module Hatchbox
 
           path            Print the config file path
           show            Show the current config (tokens are masked)
+          reset --yes     Delete saved profiles and defaults for this API
+
+        Reset keeps repo and directory pins. Log in again with the pinned name,
+        or use `hatchbox auth unuse` to remove a user pin.
       HELP
 
       def run(ctx, args, help: false)
@@ -20,8 +24,19 @@ module Hatchbox
         case sub
         when "path" then puts(Hatchbox::Config.path)
         when "show" then show(ctx)
+        when "reset" then reset(ctx, args)
         else ctx.die("Unknown config command: #{sub}\n\n#{HELP}", code: 2)
         end
+      end
+
+      def reset(ctx, args)
+        unless args == ["--yes"]
+          ctx.die("This deletes saved tokens and defaults for this API. Run `hatchbox config reset --yes` to confirm.", code: 2)
+        end
+
+        ctx.config.reset
+        ctx.output.info("Cleared #{ctx.config.path}. Run `hatchbox auth login` to start again.")
+        ctx.output.object({ "reset" => true, "path" => ctx.config.path }) if ctx.json?
       end
 
       def show(ctx)

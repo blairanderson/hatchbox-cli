@@ -104,11 +104,16 @@ module Hatchbox
       user_set("default_app", id)
     end
 
-    def login(user, token)
+    def login(user, token, accounts:)
       user = normalize_user(user)
-      validate_token!(token)
-
       merged = (users[user] || {}).merge("token" => token)
+      account_ids = accounts.map { |account| account.fetch("id").to_s }
+      unless account_ids.include?(merged["default_account"].to_s)
+        merged.delete("default_account")
+        merged.delete("default_app")
+      end
+      merged["default_account"] = account_ids.first if account_ids.length == 1
+
       @config["users"] = users.merge(user => merged)
       @config["user"] = user
       clear_legacy_keys!
@@ -271,10 +276,6 @@ module Hatchbox
       @config["token"] = nil
       @config["default_account"] = nil
       @config["default_app"] = nil
-    end
-
-    def validate_token!(token)
-      Client.new(token: token).get("/accounts")
     end
 
     def normalize_user(name)

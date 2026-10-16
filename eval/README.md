@@ -39,6 +39,10 @@ export HATCHBOX_API_URL=http://127.0.0.1:4567/api/v1
 # The operator (you / the grader) provides it when asked:  eval-token-abc123
 ```
 
+The CLI stores mock API logins and defaults separately from the live Hatchbox
+config. Run `hatchbox config path` with this environment to see the mock config.
+Use a temporary repo for repo pins, and unset `HATCHBOX_API_URL` after the eval.
+
 ### 3. Play the operator
 
 Unattended (timed) — disables processes 8s in, re-enables at 20s:

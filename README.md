@@ -45,8 +45,12 @@ Store multiple tokens and switch between them (like `gh auth`):
 hatchbox auth login --user personal
 hatchbox auth login --user work
 hatchbox auth switch --user personal   # global default
-hatchbox auth status                   # list logged-in users
+hatchbox auth status                   # show saved profiles and the local selection
 ```
+
+Login checks the token. If it can access one account, login saves that account
+as the default. If it can access several accounts, select one with
+`hatchbox accounts list` and `hatchbox accounts use <id>`.
 
 Pin a user to a directory or repo so the global default does not apply:
 
@@ -56,7 +60,11 @@ hatchbox auth use work                 # writes .hatchbox-user (all subdirs inhe
 
 cd ~/dev/work/some-repo
 hatchbox auth use work                 # writes git config hatchbox.user (local only)
+hatchbox whoami                        # check the account and detected app
 ```
+
+`auth use` checks the saved token before it changes the pin. `auth status` reads
+the local config; it does not check tokens with the API.
 
 User resolution for each command (first match wins):
 
@@ -69,6 +77,19 @@ User resolution for each command (first match wins):
 
 Credentials live in `~/.config/hatchboxcli/config.yml` (respects `XDG_CONFIG_HOME`).
 Each user stores their own `default_account` and `default_app`.
+
+To start again, clear the saved profiles and defaults, then log in:
+
+```sh
+hatchbox config reset --yes
+hatchbox auth login --user work
+hatchbox auth use work
+hatchbox whoami
+```
+
+Reset removes the config for the current API address. It keeps repo and directory
+pins. Use the same profile name when you log in, or run `hatchbox auth unuse` to
+remove a user pin. App pins use `git config --unset hatchbox.app`.
 
 ## Remembering your account & app
 
@@ -206,21 +227,26 @@ ruby -Itest -Ilib -e 'Dir["test/test_*.rb"].each { |f| require File.expand_path(
 
 # point the CLI at the bundled mock API for local experiments
 ruby eval/mock_server.rb eval/scenario.json &
-export HATCHBOX_API_URL=http://127.0.0.1:4567/api/v1
-export HATCHBOX_API_KEY=eval-token-abc123
-./bin/hatchbox accounts list
+(
+  export HATCHBOX_API_URL=http://127.0.0.1:4567/api/v1
+  export HATCHBOX_API_KEY=eval-token-abc123
+  ./bin/hatchbox accounts list
+)
 ```
 
 The `HATCHBOX_API_URL` env var overrides the base URL (used by tests and the eval harness).
+Each custom API address has a separate config under `hatchboxcli/endpoints/`.
+Mock logins cannot read or replace the live API's saved credentials or defaults.
+Use `hatchbox config path` to see the path for the current API address.
 
 ## Releasing (Homebrew)
 
 1. Bump `lib/hatchbox/version.rb`, commit, and push `main`.
-2. Tag and push: `git tag v0.4.0 && git push origin v0.4.0`.
-3. `shasum -a 256` the tarball from `.../archive/refs/tags/v0.4.0.tar.gz`.
+2. Tag and push the version, for example `git tag v0.4.1` and `git push origin v0.4.1`.
+3. `shasum -a 256` the tarball from `.../archive/refs/tags/v0.4.1.tar.gz`.
 4. Update `url` + `sha256` in `Formula/hatchbox.rb` (both repos) and push the tap.
 5. `brew update && brew upgrade hatchbox`.
-6. `gh release create v0.4.0 --notes "..."`.
+6. `gh release create v0.4.1 --notes "..."`.
 
 ## LLM eval
 

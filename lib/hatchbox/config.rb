@@ -2,6 +2,8 @@
 
 require "yaml"
 require "fileutils"
+require "digest"
+require_relative "client"
 
 module Hatchbox
   # Persists long-lived defaults (token, default_account, default_app) to
@@ -12,7 +14,11 @@ module Hatchbox
     def self.dir
       base = ENV["XDG_CONFIG_HOME"]
       base = File.join(Dir.home, ".config") if base.nil? || base.empty?
-      File.join(base, "hatchboxcli")
+      directory = File.join(base, "hatchboxcli")
+      api_url = Client.base_url
+      return directory if api_url == Client::DEFAULT_BASE_URL
+
+      File.join(directory, "endpoints", Digest::SHA256.hexdigest(api_url))
     end
 
     def self.path
@@ -51,6 +57,11 @@ module Hatchbox
 
     def to_h
       @data.dup
+    end
+
+    def reset
+      File.delete(@path) if File.exist?(@path)
+      @data.clear
     end
 
     def save

@@ -7,16 +7,14 @@ module Hatchbox
     module AuthCmd
       module_function
 
-      HOST = "app.hatchbox.io"
-
       HELP = <<~HELP
         hatchbox auth <command>
 
           login           Store an API token and log in as a user
-          status          Show all logged-in users and the active one
+          status          Show saved profiles and the selected one (no API check)
           switch          Switch the global default user
           logout          Remove a logged-in user
-          use <user>      Pin a user to this repo or directory
+          use <user>      Check a token and pin its user to this repo or directory
           unuse           Remove the user pin from this repo or directory
 
         User resolution for each command (first match wins):
@@ -55,13 +53,19 @@ module Hatchbox
         token = read_token(with_token)
         ctx.die("No token provided.", code: 2) if token.nil? || token.empty?
 
-        accounts = Client.new(token: token).get("/accounts")
+        accounts = Array(Client.new(token: token).get("/accounts"))
+        ctx.die("This token has no accessible accounts.") if accounts.empty?
         user ||= ctx.auth.derive_user_name(accounts)
-        stored = ctx.auth.login(user, token)
+        stored = ctx.auth.login(user, token, accounts: accounts)
 
-        account = Array(accounts).first
-        label = account ? "#{account['name']} (account #{account['id']})" : stored
-        ctx.output.info("Logged in as #{stored} — #{label}.")
+        account_id = ctx.auth.users.fetch(stored)["default_account"]
+        ctx.output.info("Logged in as #{stored}.")
+        if account_id
+          account = accounts.find { |entry| entry["id"].to_s == account_id }
+          ctx.output.info("Default account: #{account['name']} (#{account_id}).")
+        else
+          ctx.output.info("Choose an account with `hatchbox accounts list` and `hatchbox accounts use <id>`.")
+        end
         ctx.output.info("Credentials stored in #{Config.path}.")
         ctx.output.object({ "user" => stored, "active" => true }) if ctx.json?
       rescue APIError => e
@@ -83,11 +87,12 @@ module Hatchbox
         entries = entries.select { |e| e["active"] } if active_only
 
         resolved = ctx.auth.resolve_context
+        host = URI.parse(Client.base_url).host
 
         if ctx.json?
           payload = entries.map { |e| entry_for_json(e, show_token: show_token) }
           ctx.output.object({
-            "host" => HOST,
+            "host" => host,
             "users" => payload,
             "resolved_user" => resolved[:user],
             "resolved_source" => resolved[:source]
@@ -101,7 +106,7 @@ module Hatchbox
           return
         end
 
-        puts HOST
+        puts host
         entries.each { |e| print_entry(e, show_token: show_token) }
         print_resolution(resolved)
       end
@@ -150,6 +155,8 @@ module Hatchbox
         raw = args.shift or ctx.die("Usage: hatchbox auth use <user>", code: 2)
         user = ctx.auth.normalize_user_key(raw)
         ctx.die("Not logged in as #{user}. Run `hatchbox auth login --user #{user}`.", code: 2) unless ctx.auth.users.key?(user)
+        accounts = Array(Client.new(token: ctx.auth.users.fetch(user)["token"]).get("/accounts"))
+        ctx.die("User #{user} has no accessible accounts.") if accounts.empty?
 
         if Git.root
           Git.pin_user(user) or ctx.die("Could not write `git config #{Git::USER_KEY}` in this repo.", code: 2)
@@ -160,6 +167,8 @@ module Hatchbox
           ctx.output.info("Pinned user #{user} to this directory (.hatchbox-user).")
           ctx.output.object({ "user" => user, "pin" => "directory" }) if ctx.json?
         end
+      rescue APIError, MissingTokenError => e
+        ctx.die("Cannot use #{user}: #{e.message}\nRun `hatchbox auth login --user #{user}` to update this profile.")
       rescue ArgumentError => e
         ctx.die(e.message)
       end
@@ -191,8 +200,8 @@ module Hatchbox
       def print_entry(entry, show_token:)
         active = entry["active"]
         mark = active ? "✓" : " "
-        puts "  #{mark} Logged in as #{entry['user']}"
-        puts "  - Active user: #{active}"
+        puts "  #{mark} Saved profile: #{entry['user']}"
+        puts "  - Global default: #{active}"
         puts "  - Token: #{mask_token(entry['token'], show_token: show_token)}"
         puts "  - Default account: #{entry['default_account'] || '(not set)'}"
         puts

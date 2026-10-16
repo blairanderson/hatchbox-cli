@@ -14,7 +14,7 @@ module TestHelper
                              "HATCHBOX_API_TOKEN", "HATCHBOX_ACCOUNT_ID", "HATCHBOX_API_URL",
                              "HATCHBOX_USER")
       ENV["XDG_CONFIG_HOME"] = dir
-      %w[HATCHBOX_API_KEY HATCHBOX_TOKEN HATCHBOX_API_TOKEN HATCHBOX_ACCOUNT_ID HATCHBOX_USER].each { |k| ENV.delete(k) }
+      %w[HATCHBOX_API_KEY HATCHBOX_TOKEN HATCHBOX_API_TOKEN HATCHBOX_ACCOUNT_ID HATCHBOX_API_URL HATCHBOX_USER].each { |k| ENV.delete(k) }
       yield dir
     ensure
       saved.each { |k, v| ENV[k] = v }
